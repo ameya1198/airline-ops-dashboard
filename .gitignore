@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Old OCC replay-day data: no longer used by the app, kept out of the repo and deploy
+/public/data/occ/
+/public/data/replay_days.json

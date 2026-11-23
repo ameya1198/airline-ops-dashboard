@@ -1,26 +1,191 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+/* One-screen layout: the whole VP page fits the window, no scrolling. Below this it stacks and scrolls. */
+@custom-variant fit (@media (min-width: 1280px) and (min-height: 700px));
+/* Laptop-height windows: KPI tiles and spacing tighten so the charts keep their room. */
+@custom-variant short (@media (max-height: 860px));
+/* The shortest supported windows (125%-scaled Windows laptops): the gaps between panels tighten. */
+@custom-variant tiny (@media (max-height: 760px));
+
+/*
+ * American Airlines-inspired palette. Change the brand values here and every
+ * component, chart and status color follows.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --aa-blue: #0078d2;
+  --aa-blue-dark: #00467f;
+  --aa-red: #c30019;
+  --aa-silver: #9da6ab;
+  --aa-slate: #36495a;
+
+  --radius: 0.75rem;
+
+  --background: #f7f8f9;
+  --foreground: #131c26;
+  --card: #ffffff;
+  --card-foreground: #131c26;
+  --popover: #ffffff;
+  --popover-foreground: #131c26;
+  --primary: var(--aa-blue-dark);
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f3;
+  --secondary-foreground: #131c26;
+  --muted: #eef1f3;
+  --muted-foreground: #556472;
+  --accent: #e6f1fa;
+  --accent-foreground: var(--aa-blue-dark);
+  --destructive: var(--aa-red);
+  --border: #dde2e6;
+  --input: #cfd6db;
+  --ring: var(--aa-blue);
+
+  /* Chart series: this period (AA blue) and the year before (AA silver). */
+  --chart-1: var(--aa-blue);
+  --chart-2: var(--aa-silver);
+  --chart-3: var(--aa-slate);
+  --chart-4: #6fa8dc;
+  --chart-5: #c7cfd4;
+
+  /* KPI change status. Red is AA red; green is a deep green that reads on white. */
+  --status-better: #0e7a3b;
+  --status-worse: var(--aa-red);
+}
+
+.dark {
+  --background: #0b1219;
+  --foreground: #e8edf1;
+  --card: #111b24;
+  --card-foreground: #e8edf1;
+  --popover: #111b24;
+  --popover-foreground: #e8edf1;
+  --primary: #4fa8ec;
+  --primary-foreground: #0b1219;
+  --secondary: #1a2631;
+  --secondary-foreground: #e8edf1;
+  --muted: #1a2631;
+  --muted-foreground: #9aa8b4;
+  --accent: #14304a;
+  --accent-foreground: #cfe6f8;
+  --destructive: #ff5c6c;
+  --border: #233240;
+  --input: #2c3d4c;
+  --ring: #4fa8ec;
+  --chart-1: #4fa8ec;
+  --chart-2: #6c7a84;
+  --status-better: #3ccf7e;
+  --status-worse: #ff6b78;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-better: var(--status-better);
+  --color-worse: var(--status-worse);
+  --color-aa-blue: var(--aa-blue);
+  --color-aa-blue-dark: var(--aa-blue-dark);
+  --color-aa-red: var(--aa-red);
+  --color-aa-silver: var(--aa-silver);
+  --color-aa-slate: var(--aa-slate);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Plane icon on a KPI change: a short climb (takeoff) or descent (landing) when the value changes. */
+@keyframes takeoff {
+  from { opacity: 0; transform: translate(-3px, 3px); }
+  to { opacity: 1; transform: translate(0, 0); }
 }
+@keyframes landing {
+  from { opacity: 0; transform: translate(-3px, -3px); }
+  to { opacity: 1; transform: translate(0, 0); }
+}
+.animate-takeoff { animation: takeoff 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-landing { animation: landing 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-takeoff,
+  .animate-landing { animation: none; }
+}
+
+/* MapLibre popups in the dashboard's card style. */
+.airport-popup .maplibregl-popup-content {
+  border-radius: 0.6rem;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  box-shadow: 0 4px 16px rgb(15 27 40 / 0.08);
+  font-family: var(--font-geist-sans);
+}
+.airport-popup .maplibregl-popup-tip { display: none; }
+
+/* Runway callouts pop in one after another when the airport view settles. */
+@keyframes callout-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.runway-callout { animation: callout-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .runway-callout { animation: none; }
+}
+
+/* ---- Split-flap display (KPI values). Light tiles in the page's own greys. ---- */
+.flap {
+  --h: 38px; --w: 26px;
+  position: relative; width: var(--w); height: var(--h); perspective: 200px; flex: none;
+  font: 600 25px/var(--h) var(--font-geist-mono), ui-monospace, monospace;
+  color: var(--foreground); text-align: center;
+  border: 1px solid var(--border); border-radius: 5px; box-shadow: 0 1px 0 rgb(15 27 40 / 0.05);
+}
+.flap.narrow { --w: 12px; border-color: transparent; box-shadow: none; }
+.flap .half, .flap .leaf { position: absolute; left: 0; width: 100%; height: 50%; overflow: hidden; background: var(--muted); }
+.flap .top, .flap .leaf-top { top: 0; border-radius: 4px 4px 0 0; background: var(--background); }
+.flap .bottom, .flap .leaf-bottom { bottom: 0; border-radius: 0 0 4px 4px; }
+.flap.narrow .half, .flap.narrow .leaf { background: transparent; }
+.flap span { position: absolute; left: 0; width: 100%; height: var(--h); }
+.flap .top span, .flap .leaf-top span { top: 0; }
+.flap .bottom span, .flap .leaf-bottom span { top: calc(var(--h) / -2); }
+.flap .leaf-top { transform-origin: 50% 100%; z-index: 2; backface-visibility: hidden; }
+.flap .leaf-bottom { transform-origin: 50% 0; z-index: 2; backface-visibility: hidden; transform: rotateX(90deg); }
+.flap::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border); z-index: 3; }
+.flap .hinge { position: absolute; top: calc(50% - 3px); width: 2px; height: 6px; background: var(--border); z-index: 4; border-radius: 1px; }
+.flap .hinge.l { left: -1px; }
+.flap .hinge.r { right: -1px; }
+.flap.narrow::after, .flap.narrow .hinge { display: none; }
+@media (min-width: 1536px) and (min-height: 861px) { .flap { --h: 44px; --w: 30px; font-size: 29px; } .flap.narrow { --w: 14px; } }
+@media (max-height: 860px) { .flap { --h: 32px; --w: 22px; font-size: 21px; } .flap.narrow { --w: 10px; } }
