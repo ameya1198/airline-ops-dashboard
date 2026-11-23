@@ -21,10 +21,10 @@
     "date-fns": "^4.4.0",
     "lucide-react": "^1.76.0",
     "maplibre-gl": "^5.6.2",
-    "next": "15.5.2",
+    "next": "15.5.29",
     "radix-ui": "^1.8.1",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.7.0",
     "topojson-client": "^3.1.0",
@@ -38,7 +38,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.2",
+    "eslint-config-next": "15.5.29",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
