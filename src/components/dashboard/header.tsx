@@ -20,7 +20,7 @@ type Props = {
 export function DashboardHeader({ view, dataThrough, children }: Props) {
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-3 fit:flex-nowrap">
-      <div className="flex min-w-0 shrink-0 items-center gap-3">
+      <div className="flex min-w-0 basis-full items-center gap-3 sm:basis-0 sm:flex-1 fit:flex-none fit:shrink-0">
         <Logo />
         <div className="min-w-0">
           <h1 className="flex items-center gap-1.5 text-xl leading-tight font-medium tracking-tight short:text-lg 2xl:text-2xl">
@@ -39,13 +39,13 @@ export function DashboardHeader({ view, dataThrough, children }: Props) {
               </TooltipContent>
             </Tooltip>
           </h1>
-          <p className="font-mono text-[11px] text-muted-foreground 2xl:text-xs">
+          <p className="hidden font-mono text-[11px] text-muted-foreground sm:block 2xl:text-xs">
             Independent portfolio project · not affiliated with American Airlines · BTS data through {dataThrough}
           </p>
         </div>
       </div>
-      <div className="min-w-0 flex-1">{children}</div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="order-last w-full min-w-0 fit:order-none fit:w-auto fit:flex-1">{children}</div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <Tooltip>
           <TooltipTrigger
             data-tour="help"

@@ -212,8 +212,6 @@ export function VpDashboard() {
               months={months}
               routes={routes}
               onChange={setFilters}
-              stateName={(s) => stateNames.get(s) ?? s}
-              onClearPlace={() => mapHandle.current?.goHome()}
             />
           )}
         </DashboardHeader>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { MapPin, Search, X } from "lucide-react"
+import { Search, X } from "lucide-react"
 
 import {
   Command,
@@ -33,40 +33,15 @@ type Props = {
   months: string[]
   routes: Route[]
   onChange: (next: Filters) => void
-  /** Full name for a state's postal code, for the place chip. */
-  stateName: (postal: string) => string
-  /** Clearing the place flies the map back to the whole network. */
-  onClearPlace: () => void
 }
 
 const triggerClass =
   "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border bg-card px-3 text-sm transition-colors duration-200 hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
 
-export function FilterBar({ filters, months, routes, onChange, stateName, onClearPlace }: Props) {
-
+export function FilterBar({ filters, months, routes, onChange }: Props) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 fit:flex-nowrap">
       <PeriodFilter months={months} period={filters.period} onChange={(period) => onChange({ ...filters, period })} />
-
-      {filters.state && (
-        <span className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-primary/30 bg-accent pr-1 pl-3 text-sm text-accent-foreground">
-          <MapPin className="size-3.5" aria-hidden />
-          <span>{stateName(filters.state)}</span>
-          {filters.airport && (
-            <>
-              <span className="text-accent-foreground/50">·</span>
-              <span className="font-mono text-[13px] font-medium">{filters.airport}</span>
-            </>
-          )}
-          <button
-            onClick={onClearPlace}
-            aria-label="Back to the whole network"
-            className="cursor-pointer rounded-md p-1 hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            <X className="size-3.5" aria-hidden />
-          </button>
-        </span>
-      )}
 
       <RoutePicker routes={routes} route={filters.route} onChange={(route) => onChange({ ...filters, route })} />
 
