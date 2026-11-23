@@ -9,7 +9,7 @@ import {
 import { byMonth, KPIS, sumMeasures } from "@/lib/kpi"
 import { defaultPeriod, monthLabel, periodLabel, periodMonths, priorMonths, trendMonths } from "@/lib/period"
 import { FilterBar, type Filters } from "./filter-bar"
-import { HubLanes } from "./hub-lanes"
+import { HubLanes, type LaneGroup } from "./hub-lanes"
 import { DashboardHeader } from "./header"
 import { DelayCauses } from "./delay-causes"
 import { DelayHeatmap } from "./delay-heatmap"
@@ -19,6 +19,8 @@ import { loadStates } from "@/lib/us-states"
 
 type MonthRows = (Measures & { month: string })[]
 const isHub = (code: string) => (HUBS as readonly string[]).includes(code)
+const LANES = 5 // lanes in the comparison chart
+const MIN_LANE_FLIGHTS = 50 // flights in the period for a lane to show; fewer give a noisy rate
 
 export function VpDashboard() {
   const [monthly, setMonthly] = useState<MonthlyRow[] | null>(null)
@@ -41,10 +43,9 @@ export function VpDashboard() {
       .catch((e: Error) => setError(e.message))
   }, [])
 
-  // The route table is ~0.75 MB compressed, so it loads only when needed: a route is picked, a state
-  // is selected, or an airport that isn't a hub (hubs are already in the monthly table).
-  const needRouteRows =
-    !!filters && (!!filters.route || (!!filters.state && !filters.airport) || (!!filters.airport && !isHub(filters.airport)))
+  // The route table is ~0.75 MB compressed, so it loads only once a place is picked: the
+  // comparison lanes then split that place into its airports or routes.
+  const needRouteRows = !!filters && (!!filters.route || !!filters.state || !!filters.airport)
   useEffect(() => {
     if (needRouteRows && !routeRows) loadRouteSummary().then(setRouteRows).catch((e: Error) => setError(e.message))
   }, [needRouteRows, routeRows])
@@ -153,6 +154,75 @@ export function VpDashboard() {
     return { cur, prev: prev.every((m) => available.has(m)) ? prev : [], label: periodLabel(filters.period, available) }
   }, [filters, available])
 
+  // Comparison lanes for the selected place: the hubs for the whole network, a state's busiest
+  // airports, or an airport's busiest routes (a picked route shows its origin's routes, highlighted).
+  const airportBy = useMemo(() => new Map(airports.map((a) => [a.code, a])), [airports])
+  const rowsByRoute = useMemo(() => {
+    const out = new Map<string, RouteMonthRow[]>()
+    for (const r of routeRows ?? []) out.set(r.route, [...(out.get(r.route) ?? []), r])
+    return out
+  }, [routeRows])
+  const comparison = useMemo(() => {
+    if (!monthly || !filters || !hubPeriod) return null
+    const cur = new Set(hubPeriod.cur)
+    const busiest = (groups: LaneGroup[], keep?: string | null) => {
+      const flown = new Map(groups.map((g) => [g.id, g.rows.reduce((n, r) => (cur.has(r.month) ? n + r.flown : n), 0)]))
+      // Too few flights make a noisy rate (6 flights at 100% on-time), so small lanes drop out.
+      const top = groups
+        .filter((g) => flown.get(g.id)! >= MIN_LANE_FLIGHTS || (g.id === keep && flown.get(g.id)! > 0))
+        .sort((a, b) => flown.get(b.id)! - flown.get(a.id)!)
+      const picked = top.slice(0, LANES)
+      const kept = keep && !picked.some((g) => g.id === keep) ? top.find((g) => g.id === keep) : undefined
+      return kept ? [...picked.slice(0, LANES - 1), kept] : picked
+    }
+    const city = (code: string) => airportBy.get(code)?.city ?? code
+    const routesFrom = (code: string, keep: string | null) => {
+      const groups = [...rowsByRoute.entries()]
+        .filter(([route]) => originOf.get(route) === code)
+        .map(([route, rows]) => {
+          const dest = route.split("-")[1]
+          return { id: route, name: `→ ${dest}`, sub: city(dest), rows }
+        })
+      return {
+        title: `Routes from ${code}`,
+        groups: busiest(groups, keep),
+        reference: { label: code, rows: rowsFor({ state: null, airport: code, route: null }) ?? [] },
+        selected: keep,
+      }
+    }
+
+    if (!filters.state && !filters.airport && !filters.route) {
+      return {
+        title: "Hub comparison",
+        groups: HUBS.map((hub) => ({ id: hub, name: hub, sub: city(hub), rows: monthly.filter((r) => r.hub === hub) })),
+        reference: { label: "Network", rows: monthly },
+        selected: null,
+      }
+    }
+    if (!routeRows) return null
+    const origin = filters.route ? originOf.get(filters.route) : filters.airport
+    if (origin) return routesFrom(origin, filters.route)
+
+    const inState = airports
+      .filter((a) => a.state === filters.state)
+      .map((a) => ({
+        id: a.code,
+        name: a.code,
+        sub: a.city,
+        rows: [...rowsByRoute.entries()].filter(([route]) => originOf.get(route) === a.code).flatMap(([, rows]) => rows),
+      }))
+    const groups = busiest(inState)
+    // A state with one served airport has nothing to compare, so show that airport's routes.
+    if (groups.length === 1) return routesFrom(groups[0].id, null)
+    const name = stateNames.get(filters.state!) ?? filters.state!
+    return {
+      title: `Airports in ${name}`,
+      groups,
+      reference: { label: name, rows: rowsFor({ state: filters.state, airport: null, route: null }) ?? [] },
+      selected: null,
+    }
+  }, [monthly, filters, hubPeriod, routeRows, rowsByRoute, originOf, airports, airportBy, stateNames, rowsFor])
+
   // Numbers for an airport's view: departures from that airport in the selected period, vs the
   // same months a year earlier. Hub airports come from the monthly table; others will need an
   // airport-level table later.
@@ -251,13 +321,12 @@ export function VpDashboard() {
           </div>
 
           <div className="flex min-h-0 flex-col gap-3 tiny:gap-2 fit:col-span-2 2xl:gap-4">
-            {monthly && hubPeriod && filters ? (
+            {comparison && hubPeriod ? (
               <HubLanes
-                monthly={monthly}
+                {...comparison}
                 months={hubPeriod.cur}
                 priorMonths={hubPeriod.prev}
                 periodLabel={hubPeriod.label}
-                selected={filters.airport && isHub(filters.airport) ? filters.airport : null}
                 className="fit:flex-[1.4]"
               />
             ) : (
