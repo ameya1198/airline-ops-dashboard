@@ -83,7 +83,11 @@ export function HubLanes({ title, noun, groups, reference, months, priorMonths, 
   const minNote = noun === "hubs" ? "" : ` with ${MIN_LANE_FLIGHTS}+ flights`
   const selectionText = canPick
     ? `${lanes.length} of ${eligible} ${noun}${minNote}, by ${pick === "busiest" ? "most flights operated" : worstBy}`
-    : `All ${eligible} ${noun}${minNote}`
+    : eligible === 0
+      ? `No ${noun}${minNote}`
+      : eligible === 1
+        ? `The only ${noun.slice(0, -1)}${minNote}`
+        : `All ${eligible} ${noun}${minNote}`
   const selectionHelp =
     noun === "hubs"
       ? `American's five hubs, each compared with the whole network (dashed line) for ${periodLabel}. Lanes are ordered best to worst on the chosen measure.`

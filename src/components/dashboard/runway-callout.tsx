@@ -1,5 +1,6 @@
 "use client"
 
+import { Fragment } from "react"
 import { PlaneLanding, PlaneTakeoff } from "lucide-react"
 
 import { useAnimatedNumber } from "@/hooks/use-animated-number"
@@ -15,7 +16,8 @@ export type AirportCallout = {
 }
 
 type Props = {
-  callout: AirportCallout
+  /** One callout per bubble; several share one card when the bubbles wouldn't fit side by side. */
+  callouts: AirportCallout[]
   /** "up": bubble above its runway point; "down": below it. */
   side: "up" | "down"
   /** Position in the entrance sequence. */
@@ -27,40 +29,42 @@ type Props = {
   onHover: (on: boolean) => void
 }
 
-/** A big-number speech bubble pinned to a runway, with a tail down to a dot on the runway. */
-export function RunwayCallout({ callout, side, index, stem = 28, shift = 0, onHover }: Props) {
+/** A big-number speech bubble pinned to a runway or terminal, with a tail down to a dot. */
+export function RunwayCallout({ callouts, side, index, stem = 28, shift = 0, onHover }: Props) {
   const delay = 160 * index
-  const shown = useAnimatedNumber(callout.value, { from: 0, duration: 900, delay: delay + 120 })
-  const change = callout.prior ? ((callout.value - callout.prior) / callout.prior) * 100 : null
-  const rose = change !== null && change > 0
-  const better = change !== null && rose === callout.higherIsBetter
-  const Icon = rose ? PlaneTakeoff : PlaneLanding
+  const combined = callouts.length > 1
 
   const bubble = (
     <div
-      className="relative min-w-[150px] rounded-xl border bg-card px-3.5 pt-2.5 pb-2 shadow-[0_6px_20px_rgb(15_27_40/0.10)]"
+      className={cn(
+        "relative rounded-lg border bg-card shadow-[0_4px_14px_rgb(15_27_40/0.10)]",
+        combined ? "px-3 py-2" : "min-w-[112px] px-3 pt-1.5 pb-1.5",
+      )}
       style={shift ? { transform: `translateX(${shift}px)` } : undefined}
     >
-      <p className="text-xs text-muted-foreground">{callout.label}</p>
-      <p className="text-[28px] leading-tight font-medium tracking-tight tabular-nums">
-        {Math.round(shown ?? 0).toLocaleString()}
-      </p>
-      {change !== null && Math.abs(change) >= 0.05 && (
-        <p className={cn("mt-0.5 flex items-center gap-1 text-[11px]", better ? "text-better" : "text-worse")}>
-          <Icon className="size-3.5" strokeWidth={1.75} aria-hidden />
-          <span className="font-mono tabular-nums">
-            {rose ? "+" : "−"}
-            {Math.abs(change).toFixed(1)}%
-          </span>
-          <span className="text-muted-foreground">vs year before</span>
-        </p>
+      {combined ? (
+        <div className="grid grid-cols-[auto_auto_auto] items-baseline gap-x-3 gap-y-0.5">
+          {callouts.map((c, i) => (
+            <Fragment key={c.key}>
+              <span className="text-[11px] text-muted-foreground">{c.label}</span>
+              <Value callout={c} delay={delay + 120 + 120 * i} className="justify-self-end text-base font-medium" />
+              <Change callout={c} />
+            </Fragment>
+          ))}
+        </div>
+      ) : (
+        <>
+          <p className="text-[11px] text-muted-foreground">{callouts[0].label}</p>
+          <Value callout={callouts[0]} delay={delay + 120} className="block text-xl leading-tight font-medium tracking-tight" />
+          <Change callout={callouts[0]} />
+        </>
       )}
       {/* Speech-bubble notch pointing at the tail. */}
       <span
         aria-hidden
         className={cn(
-          "absolute left-1/2 size-2.5 -translate-x-1/2 rotate-45 bg-card",
-          side === "up" ? "-bottom-[5.5px] border-r border-b" : "-top-[5.5px] border-t border-l",
+          "absolute left-1/2 size-2 -translate-x-1/2 rotate-45 bg-card",
+          side === "up" ? "-bottom-[4.5px] border-r border-b" : "-top-[4.5px] border-t border-l",
         )}
         style={shift ? { left: `calc(50% - ${shift}px)` } : undefined}
       />
@@ -76,7 +80,7 @@ export function RunwayCallout({ callout, side, index, stem = 28, shift = 0, onHo
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       role="group"
-      aria-label={`${callout.label}: ${callout.value.toLocaleString()}`}
+      aria-label={callouts.map((c) => `${c.label}: ${c.value.toLocaleString()}`).join(", ")}
     >
       {side === "up" ? (
         <>
@@ -92,5 +96,30 @@ export function RunwayCallout({ callout, side, index, stem = 28, shift = 0, onHo
         </>
       )}
     </div>
+  )
+}
+
+/** The number, counting up from zero when the bubble appears. */
+function Value({ callout, delay, className }: { callout: AirportCallout; delay: number; className?: string }) {
+  const shown = useAnimatedNumber(callout.value, { from: 0, duration: 900, delay })
+  return <span className={cn("tabular-nums", className)}>{Math.round(shown ?? 0).toLocaleString()}</span>
+}
+
+/** Change vs the same months a year before, coloured by whether it's good news. */
+function Change({ callout }: { callout: AirportCallout }) {
+  const change = callout.prior ? ((callout.value - callout.prior) / callout.prior) * 100 : null
+  if (change === null || Math.abs(change) < 0.05) return <span />
+  const rose = change > 0
+  const better = rose === callout.higherIsBetter
+  const Icon = rose ? PlaneTakeoff : PlaneLanding
+  return (
+    <span className={cn("flex items-center gap-1 text-[11px]", better ? "text-better" : "text-worse")}>
+      <Icon className="size-3" strokeWidth={1.75} aria-hidden />
+      <span className="font-mono tabular-nums">
+        {rose ? "+" : "−"}
+        {Math.abs(change).toFixed(1)}%
+      </span>
+      <span className="text-muted-foreground">YoY</span>
+    </span>
   )
 }

@@ -35,10 +35,9 @@ const RISE_MS = 2600
 // delay (0 at the terminal core, RISE_SPREAD at the farthest building).
 const RISE_SPREAD = 0.8
 const BUBBLE_STEM = 56 // px; lifts a bubble clear of the terminal roof it stands on
-// Bubble box size (px) for keeping neighbours apart; a bubble may slide sideways over its stem
+// Bubble width (px) for keeping neighbours apart; a bubble may slide sideways over its stem
 // by up to MAX_SHIFT while the stem still meets its underside.
-const BUBBLE_W = 154
-const BUBBLE_H = 93
+const BUBBLE_W = 124
 const BUBBLE_GAP = 14
 const MAX_SHIFT = BUBBLE_W / 2 - 18
 // Closest drone zoom; small airports with one compact terminal reach it.
@@ -83,7 +82,15 @@ type OutlineCollection = GeoJSON.FeatureCollection & {
   properties: { code: string; name: string; bbox: [number, number, number, number]; center: [number, number] }
 }
 
-type Anchor = { ref: string; lngLat: [number, number]; side: "up" | "down"; stem?: number; shift?: number }
+type Anchor = {
+  ref: string
+  lngLat: [number, number]
+  side: "up" | "down"
+  stem?: number
+  shift?: number
+  /** One card carries every callout (a compact terminal with no room for three bubbles). */
+  combined?: boolean
+}
 
 /**
  * The airport's terminal area, from its 3D buildings: where the jet bridges are. Null for airports
@@ -191,18 +198,14 @@ function terminalAnchors(map: maplibregl.Map, core: Core): Anchor[] {
     const middle = pts.slice(1, -1).reduce((b, x) => (Math.abs(x.p.x - midX) < Math.abs(b.p.x - midX) ? x : b))
     picks = [left, middle, right]
   }
-  // Keep the bubbles apart: slide them sideways over their stems; failing that, lift the middle
-  // one onto a taller stem above the other two.
-  const xs = picks.map(({ p }) => p.x)
-  const stems = picks.map(() => BUBBLE_STEM)
-  let shifts = spreadBubbles(xs)
-  if (!shifts && picks.length === 3) {
-    const outer = spreadBubbles([xs[0], xs[2]]) ?? spreadBubbles([xs[0], xs[2]], Infinity)!
-    shifts = [outer[0], 0, outer[1]]
-    stems[1] = BUBBLE_STEM + BUBBLE_H + BUBBLE_GAP
+  // Keep the bubbles apart by sliding them sideways over their stems. A compact terminal has no
+  // room for three side by side, so one card on the middle point carries all the numbers.
+  const shifts = spreadBubbles(picks.map(({ p }) => p.x))
+  if (!shifts || picks.length < 3) {
+    const ll = picks[Math.floor(picks.length / 2)]?.ll ?? core.candidates[0]
+    return ll ? [{ ref: "", lngLat: ll, side: "up", stem: BUBBLE_STEM, combined: true }] : []
   }
-  shifts ??= spreadBubbles(xs, Infinity)!
-  return picks.map(({ ll }, i) => ({ ref: "", lngLat: ll, side: "up", stem: stems[i], shift: shifts[i] }))
+  return picks.map(({ ll }, i) => ({ ref: "", lngLat: ll, side: "up", stem: BUBBLE_STEM, shift: shifts[i] }))
 }
 
 /**
@@ -967,7 +970,7 @@ export function NetworkMap({ airports, statsFor, departures, onPlaceChange, clas
         <Fragment key={callouts[i].key}>
           {createPortal(
             <RunwayCallout
-              callout={callouts[i]}
+              callouts={anchors[i].combined ? callouts : [callouts[i]]}
               side={anchors[i].side}
               stem={anchors[i].stem}
               shift={anchors[i].shift}
