@@ -115,10 +115,9 @@ export function HubLanes({ title, noun, groups, reference, months, priorMonths, 
 
   return (
     <Card className={cn("gap-0 rounded-xl border-border/80 py-0 shadow-none", className)}>
+      {/* Short title on the left and the measure switch on the right; the period sits in the line below. */}
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-5 pt-4 pb-0 short:pt-3">
-        <CardTitle className="text-sm font-medium">
-          {title} <span className="text-muted-foreground">· {periodLabel}</span>
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <ToggleGroup
           type="single"
           value={measureKey}
@@ -162,7 +161,9 @@ export function HubLanes({ title, noun, groups, reference, months, priorMonths, 
             ))}
           </ToggleGroup>
         )}
-        <span>{selectionText}</span>
+        <span>
+          {periodLabel} · {selectionText}
+        </span>
         <Tooltip>
           <TooltipTrigger
             aria-label={`How these ${noun} are chosen`}
