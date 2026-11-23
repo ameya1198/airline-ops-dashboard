@@ -223,19 +223,21 @@ export function VpDashboard() {
     }
   }, [monthly, filters, hubPeriod, routeRows, rowsByRoute, originOf, airports, airportBy, stateNames, rowsFor])
 
-  // Numbers for an airport's view: departures from that airport in the selected period, vs the
-  // same months a year earlier. Hub airports come from the monthly table; others will need an
-  // airport-level table later.
+  // Numbers for an airport's view: scheduled departures and arrivals at that airport in the
+  // selected period and departures cancelled, vs the same months a year earlier.
   const statsFor = useCallback(
     (code: string): AirportStats | null => {
-      if (!monthly || !filters) return null
+      if (!monthly || !filters || !routeRows) return null
       const rows = rowsFor({ state: null, airport: code, route: null })
       if (!rows) return null
+      const arrivals = [...rowsByRoute.entries()].filter(([route]) => route.endsWith(`-${code}`)).flatMap(([, r]) => r)
       const cur = periodMonths(filters.period, available)
       const prev = priorMonths(cur)
       const hasPrev = prev.every((m) => available.has(m))
       const here = sumMeasures(rows.filter((r) => cur.includes(r.month)))
       const before = sumMeasures(rows.filter((r) => prev.includes(r.month)))
+      const arrHere = sumMeasures(arrivals.filter((r) => cur.includes(r.month)))
+      const arrBefore = sumMeasures(arrivals.filter((r) => prev.includes(r.month)))
       if (!here.flights) return null
       const airport = airports.find((a) => a.code === code)
       const prior = (v: number) => (hasPrev ? v : null)
@@ -247,12 +249,12 @@ export function VpDashboard() {
         networkOnTime: KPIS[0].compute(sumMeasures(monthly.filter((r) => cur.includes(r.month)))),
         callouts: [
           { key: "departures", label: "Departures", value: here.flights, prior: prior(before.flights), higherIsBetter: true },
-          { key: "flown", label: "Flights flown", value: here.flown, prior: prior(before.flown), higherIsBetter: true },
+          { key: "arrivals", label: "Arrivals", value: arrHere.flights, prior: prior(arrBefore.flights), higherIsBetter: true },
           { key: "cancelled", label: "Cancellations", value: here.cancelled, prior: prior(before.cancelled), higherIsBetter: false },
         ],
       }
     },
-    [monthly, filters, available, airports, rowsFor],
+    [monthly, filters, available, airports, rowsFor, routeRows, rowsByRoute],
   )
 
   // Departures per airport in the selected period, for the map's airport list and tooltips.
