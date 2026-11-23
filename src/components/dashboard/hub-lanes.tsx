@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { Info } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Measures } from "@/lib/data"
 import { formatChange, KPIS, sumMeasures, type KpiDef } from "@/lib/kpi"
 import { cn } from "@/lib/utils"
@@ -13,6 +15,8 @@ const NAME_COL = 136 // px, code and city
 // Short names for the measure switch, which has to fit a one-third-width column.
 const SHORT_LABEL: Record<string, string> = { onTime: "On-time", avgDelay: "Avg delay", cancelRate: "Cancellations" }
 const END_PAD = 34 // px kept clear at each end of a strip for the threshold markings
+export const LANES = 5 // lanes shown at once
+export const MIN_LANE_FLIGHTS = 50 // flights in the period for a lane to count; fewer give a noisy rate
 
 type MonthRows = (Measures & { month: string })[]
 
@@ -23,6 +27,9 @@ type Lane = { id: string; name: string; sub: string; value: number | null; prior
 
 type Props = {
   title: string
+  /** What the lanes are, plural: "hubs", "airports", "routes". */
+  noun: string
+  /** Every candidate; the chart picks which ones get a lane. */
   groups: LaneGroup[]
   /** What the dashed line shows: the place the lanes split up (the network, a state, an airport). */
   reference: { label: string; rows: MonthRows }
@@ -40,27 +47,53 @@ type Props = {
  * value, a ring at the same months a year before, and a trail between them (green if better, red
  * if worse). The dashed line is the place they belong to.
  */
-export function HubLanes({ title, groups, reference, months, priorMonths, periodLabel, selected, className }: Props) {
+export function HubLanes({ title, noun, groups, reference, months, priorMonths, periodLabel, selected, className }: Props) {
   const [measureKey, setMeasureKey] = useState(MEASURES[0].key)
   const def = MEASURES.find((m) => m.key === measureKey)!
+  const [pick, setPick] = useState<"busiest" | "worst">("busiest")
 
-  const { lanes, network, scale } = useMemo(() => {
+  const { lanes, network, scale, eligible } = useMemo(() => {
     const cur = new Set(months)
     const prev = new Set(priorMonths)
     const network = def.compute(sumMeasures(reference.rows.filter((r) => cur.has(r.month))))
-    const lanes: Lane[] = groups.map(({ id, name, sub, rows }) => {
+    const all: Lane[] = groups.map(({ id, name, sub, rows }) => {
       const now = sumMeasures(rows.filter((r) => cur.has(r.month)))
       const before = sumMeasures(rows.filter((r) => prev.has(r.month)))
       return { id, name, sub, value: def.compute(now), prior: prev.size ? def.compute(before) : null, flown: now.flown }
     })
-      .filter((l) => l.value !== null)
-      .sort((a, b) => (def.higherIsBetter ? b.value! - a.value! : a.value! - b.value!))
-    const all = lanes.flatMap((l) => [l.value, l.prior]).concat(network).filter((v): v is number => v !== null)
-    return { lanes, network, scale: niceScale(Math.min(...all), Math.max(...all)) }
-  }, [groups, reference, months, priorMonths, def])
+    // Too few flights make a noisy rate (6 flights at 100% on-time), so those can't take a lane,
+    // unless it's the route picked in the filter.
+    const eligible = all.filter((l) => l.value !== null && (l.flown >= MIN_LANE_FLIGHTS || l.id === selected))
+    const bestFirst = (a: Lane, b: Lane) => (def.higherIsBetter ? b.value! - a.value! : a.value! - b.value!)
+    // Busiest: most flights operated. Worst: furthest the wrong way on the chosen measure.
+    let chosen = [...eligible]
+      .sort(pick === "worst" ? (a, b) => bestFirst(b, a) : (a, b) => b.flown - a.flown)
+      .slice(0, LANES)
+    const pinned = eligible.find((l) => l.id === selected)
+    if (pinned && !chosen.includes(pinned)) chosen = [...chosen.slice(0, LANES - 1), pinned]
+    const lanes = chosen.sort(bestFirst)
+    const values = lanes.flatMap((l) => [l.value, l.prior]).concat(network).filter((v): v is number => v !== null)
+    return { lanes, network, eligible: eligible.length, scale: niceScale(Math.min(...values), Math.max(...values)) }
+  }, [groups, reference, months, priorMonths, def, pick, selected])
+  const canPick = eligible > LANES
 
-  // Taxi: planes start where each hub was a year ago and roll to where it is now.
-  const dataKey = `${def.key}|${months.join()}|${groups.map((g) => g.id).join()}`
+  // The selection rule in words: a short line on the chart, the full version behind the (i).
+  const label = def.label.toLowerCase()
+  const worstBy = def.higherIsBetter ? `lowest ${label}` : `highest ${label}`
+  const minNote = noun === "hubs" ? "" : ` with ${MIN_LANE_FLIGHTS}+ flights`
+  const selectionText = canPick
+    ? `${lanes.length} of ${eligible} ${noun}${minNote}, by ${pick === "busiest" ? "most flights operated" : worstBy}`
+    : `All ${eligible} ${noun}${minNote}`
+  const selectionHelp =
+    noun === "hubs"
+      ? `American's five hubs, each compared with the whole network (dashed line) for ${periodLabel}. Lanes are ordered best to worst on the chosen measure.`
+      : `${title} in ${periodLabel}. Busiest shows the ${LANES} with the most flights operated; Worst shows the ${LANES} with the ${worstBy}, and changes with the measure. ` +
+        `${noun[0].toUpperCase() + noun.slice(1)} with fewer than ${MIN_LANE_FLIGHTS} flights are left out, because a handful of flights gives an unreliable rate` +
+        `${noun === "routes" ? "; a route picked in the Route filter always gets a lane" : ""}. ` +
+        `The dashed line is ${reference.label} overall, and lanes are ordered best to worst.`
+
+  // Taxi: planes start where each lane was a year ago and roll to where it is now.
+  const dataKey = `${def.key}|${months.join()}|${lanes.map((l) => l.id).join()}`
   const [arrivedKey, setArrivedKey] = useState("")
   useEffect(() => {
     let raf = requestAnimationFrame(() => (raf = requestAnimationFrame(() => setArrivedKey(dataKey))))
@@ -101,6 +134,41 @@ export function HubLanes({ title, groups, reference, months, priorMonths, period
           ))}
         </ToggleGroup>
       </CardHeader>
+
+      {/* How the lanes were picked, in words, with the switch between busiest and worst. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 pt-2 text-[11px] text-muted-foreground">
+        {canPick && (
+          <ToggleGroup
+            type="single"
+            value={pick}
+            onValueChange={(v) => v && setPick(v as typeof pick)}
+            variant="outline"
+            size="sm"
+            aria-label={`Which ${noun} to show`}
+            className="h-7"
+          >
+            {(["busiest", "worst"] as const).map((p) => (
+              <ToggleGroupItem
+                key={p}
+                value={p}
+                className="h-7 cursor-pointer px-2.5 text-[11px] capitalize data-[state=on]:bg-accent data-[state=on]:font-medium data-[state=on]:text-accent-foreground"
+              >
+                {p}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        )}
+        <span>{selectionText}</span>
+        <Tooltip>
+          <TooltipTrigger
+            aria-label={`How these ${noun} are chosen`}
+            className="-ml-1.5 cursor-help rounded-full hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <Info className="size-3.5" aria-hidden />
+          </TooltipTrigger>
+          <TooltipContent className="max-w-80 text-xs leading-relaxed">{selectionHelp}</TooltipContent>
+        </Tooltip>
+      </div>
 
       {/* No min-h-0 here: the card never shrinks below what its five lanes need. */}
       <CardContent className="flex flex-1 flex-col px-5 pt-1 pb-3">
@@ -180,9 +248,15 @@ export function HubLanes({ title, groups, reference, months, priorMonths, period
           {network !== null && (
             <div
               className="pointer-events-none absolute -top-5 bottom-0 z-[4] border-l-[1.5px] border-dashed border-aa-slate"
-              style={{ left: `calc(${NAME_COL}px + ${pos(network)})` }}
+              style={{ left: `calc(${NAME_COL + END_PAD}px + (100% - ${NAME_COL + 2 * END_PAD}px) * ${frac(network)})` }}
             >
-              <span className="absolute -top-2 -translate-x-1/2 bg-card px-1 font-mono text-[11px] whitespace-nowrap text-aa-slate">
+              {/* Centred on the line, but kept inside the card when the line sits near either end. */}
+              <span
+                className={cn(
+                  "absolute -top-2 bg-card px-1 font-mono text-[11px] whitespace-nowrap text-aa-slate",
+                  frac(network) > 0.8 ? "-translate-x-full" : frac(network) < 0.2 ? "" : "-translate-x-1/2",
+                )}
+              >
                 {reference.label} {fmt(network)}
               </span>
             </div>
@@ -192,7 +266,7 @@ export function HubLanes({ title, groups, reference, months, priorMonths, period
         <div className="relative h-6 border-t" style={{ marginLeft: NAME_COL }}>
           {scale.ticks.map((t) => (
             <span key={t} className="absolute top-1.5 -translate-x-1/2 font-mono text-[11px] text-muted-foreground" style={{ left: pos(t) }}>
-              {t.toFixed(scale.step < 1 ? 1 : 0)}
+              {t.toFixed(Number.isInteger(scale.step) ? 0 : 1)}
               {def.unit === "%" ? "%" : ""}
             </span>
           ))}

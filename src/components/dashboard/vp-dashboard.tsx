@@ -9,7 +9,7 @@ import {
 import { byMonth, KPIS, sumMeasures } from "@/lib/kpi"
 import { defaultPeriod, monthLabel, periodLabel, periodMonths, priorMonths, trendMonths } from "@/lib/period"
 import { FilterBar, type Filters } from "./filter-bar"
-import { HubLanes, type LaneGroup } from "./hub-lanes"
+import { HubLanes, MIN_LANE_FLIGHTS, type LaneGroup } from "./hub-lanes"
 import { DashboardHeader } from "./header"
 import { DelayCauses } from "./delay-causes"
 import { DelayHeatmap } from "./delay-heatmap"
@@ -19,8 +19,6 @@ import { loadStates } from "@/lib/us-states"
 
 type MonthRows = (Measures & { month: string })[]
 const isHub = (code: string) => (HUBS as readonly string[]).includes(code)
-const LANES = 5 // lanes in the comparison chart
-const MIN_LANE_FLIGHTS = 50 // flights in the period for a lane to show; fewer give a noisy rate
 
 export function VpDashboard() {
   const [monthly, setMonthly] = useState<MonthlyRow[] | null>(null)
@@ -165,16 +163,7 @@ export function VpDashboard() {
   const comparison = useMemo(() => {
     if (!monthly || !filters || !hubPeriod) return null
     const cur = new Set(hubPeriod.cur)
-    const busiest = (groups: LaneGroup[], keep?: string | null) => {
-      const flown = new Map(groups.map((g) => [g.id, g.rows.reduce((n, r) => (cur.has(r.month) ? n + r.flown : n), 0)]))
-      // Too few flights make a noisy rate (6 flights at 100% on-time), so small lanes drop out.
-      const top = groups
-        .filter((g) => flown.get(g.id)! >= MIN_LANE_FLIGHTS || (g.id === keep && flown.get(g.id)! > 0))
-        .sort((a, b) => flown.get(b.id)! - flown.get(a.id)!)
-      const picked = top.slice(0, LANES)
-      const kept = keep && !picked.some((g) => g.id === keep) ? top.find((g) => g.id === keep) : undefined
-      return kept ? [...picked.slice(0, LANES - 1), kept] : picked
-    }
+    const flownIn = (g: LaneGroup) => g.rows.reduce((n, r) => (cur.has(r.month) ? n + r.flown : n), 0)
     const city = (code: string) => airportBy.get(code)?.city ?? code
     const routesFrom = (code: string, keep: string | null) => {
       const groups = [...rowsByRoute.entries()]
@@ -185,7 +174,8 @@ export function VpDashboard() {
         })
       return {
         title: `Routes from ${code}`,
-        groups: busiest(groups, keep),
+        noun: "routes",
+        groups,
         reference: { label: code, rows: rowsFor({ state: null, airport: code, route: null }) ?? [] },
         selected: keep,
       }
@@ -194,6 +184,7 @@ export function VpDashboard() {
     if (!filters.state && !filters.airport && !filters.route) {
       return {
         title: "Hub comparison",
+        noun: "hubs",
         groups: HUBS.map((hub) => ({ id: hub, name: hub, sub: city(hub), rows: monthly.filter((r) => r.hub === hub) })),
         reference: { label: "Network", rows: monthly },
         selected: null,
@@ -211,13 +202,16 @@ export function VpDashboard() {
         sub: a.city,
         rows: [...rowsByRoute.entries()].filter(([route]) => originOf.get(route) === a.code).flatMap(([, rows]) => rows),
       }))
-    const groups = busiest(inState)
-    // A state with one served airport has nothing to compare, so show that airport's routes.
-    if (groups.length === 1) return routesFrom(groups[0].id, null)
+    // A state with one busy airport has nothing to compare, so show that airport's routes.
+    if (inState.filter((g) => flownIn(g) >= MIN_LANE_FLIGHTS).length <= 1) {
+      const top = [...inState].sort((a, b) => flownIn(b) - flownIn(a))[0]
+      if (top) return routesFrom(top.id, null)
+    }
     const name = stateNames.get(filters.state!) ?? filters.state!
     return {
       title: `Airports in ${name}`,
-      groups,
+      noun: "airports",
+      groups: inState,
       reference: { label: name, rows: rowsFor({ state: filters.state, airport: null, route: null }) ?? [] },
       selected: null,
     }
